@@ -1,0 +1,55 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: yt_downloader
+      POSTGRES_USER: yt_downloader
+      POSTGRES_PASSWORD: yt_downloader
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yt_downloader -d yt_downloader"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    env_file:
+      - .env
+    environment:
+      PORT: 3000
+      DATABASE_URL: ${DATABASE_URL:-postgres://yt_downloader:yt_downloader@postgres:5432/yt_downloader}
+      DOWNLOAD_DIRECTORY: /app/downloads
+      SESSION_STORE_FILE: /app/data/sessions.json
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    volumes:
+      - downloads:/app/downloads
+      - app-data:/app/data
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoring"]
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  app-data:
+  downloads:
+  postgres-data:
+  prometheus-data:
